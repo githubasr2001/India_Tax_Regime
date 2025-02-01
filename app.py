@@ -3,12 +3,17 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
-def calculate_old_regime(salary, deductions=0):
+def calculate_old_regime(salary):
     # Standard deduction
     std_deduction = 50000
     
+    # Assuming standard deductions under 80C and others
+    standard_80c = min(150000, salary * 0.15)  # Assuming 15% of salary goes to 80C investments
+    standard_health_insurance = 25000  # Standard health insurance premium
+    standard_deductions = standard_80c + standard_health_insurance
+    
     # Calculate taxable income
-    taxable_income = salary - std_deduction - deductions
+    taxable_income = salary - std_deduction - standard_deductions
     if taxable_income < 0:
         taxable_income = 0
     
@@ -25,7 +30,7 @@ def calculate_old_regime(salary, deductions=0):
     cess = tax * 0.04
     total_tax = tax + cess
     
-    return taxable_income, tax, cess, total_tax
+    return taxable_income, standard_deductions, tax, cess, total_tax
 
 def calculate_new_regime(salary):
     # Standard deduction
@@ -57,6 +62,15 @@ def calculate_new_regime(salary):
     
     return taxable_income, tax, cess, total_tax
 
+def create_monthly_breakdown(total_tax):
+    monthly_tax = total_tax / 12
+    tds_data = {
+        'Month': ['April', 'May', 'June', 'July', 'August', 'September', 
+                 'October', 'November', 'December', 'January', 'February', 'March'],
+        'TDS Amount': [monthly_tax] * 12
+    }
+    return pd.DataFrame(tds_data)
+
 def main():
     st.set_page_config(layout="wide", page_title="Indian Tax Calculator 2024")
     
@@ -64,132 +78,107 @@ def main():
     st.title("🇮🇳 Indian Income Tax Calculator 2024")
     st.markdown("---")
     
-    # Create two columns for the layout
-    col1, col2 = st.columns([2, 1])
+    # Single input for salary
+    salary = st.number_input("Enter Your Annual Salary (₹)", 
+                            min_value=0, 
+                            value=1000000, 
+                            step=50000,
+                            help="Enter your total annual salary before any deductions")
+    
+    # Calculate taxes for both regimes
+    old_taxable, standard_deductions, old_tax, old_cess, old_total = calculate_old_regime(salary)
+    new_taxable, new_tax, new_cess, new_total = calculate_new_regime(salary)
+    
+    # Create three columns for the layout
+    col1, col2 = st.columns(2)
     
     with col1:
-        st.subheader("📊 Tax Calculator")
+        st.markdown("### Old Tax Regime")
+        st.info(f"""
+        💰 Gross Annual Salary: ₹{salary:,}
         
-        # Input fields
-        salary = st.number_input("Enter Annual Salary (₹)", min_value=0, value=1000000, step=50000)
-        deductions = st.number_input("Enter Total Deductions (for Old Regime)", min_value=0, value=150000, step=10000)
+        Deductions Breakdown:
+        - Standard Deduction: ₹50,000
+        - Estimated 80C Investments: ₹{min(150000, int(salary * 0.15)):,}
+        - Health Insurance Premium: ₹25,000
         
-        # Calculate taxes for both regimes
-        old_taxable, old_tax, old_cess, old_total = calculate_old_regime(salary, deductions)
-        new_taxable, new_tax, new_cess, new_total = calculate_new_regime(salary)
+        📊 Calculations:
+        - Total Deductions: ₹{standard_deductions + 50000:,}
+        - Taxable Income: ₹{old_taxable:,}
+        - Base Tax: ₹{old_tax:,}
+        - Health & Education Cess (4%): ₹{old_cess:,}
         
-        # Display results in a nice format
-        st.markdown("### 📈 Comparison Results")
-        
-        col_results1, col_results2 = st.columns(2)
-        
-        with col_results1:
-            st.markdown("#### Old Regime")
-            st.info(f"""
-            Gross Salary: ₹{salary:,}
-            Standard Deduction: ₹50,000
-            Additional Deductions: ₹{deductions:,}
-            Taxable Income: ₹{old_taxable:,}
-            Base Tax: ₹{old_tax:,}
-            Health & Education Cess: ₹{old_cess:,}
-            **Total Tax: ₹{old_total:,}**
-            """)
-            
-        with col_results2:
-            st.markdown("#### New Regime")
-            st.success(f"""
-            Gross Salary: ₹{salary:,}
-            Standard Deduction: ₹75,000
-            Additional Deductions: N/A
-            Taxable Income: ₹{new_taxable:,}
-            Base Tax: ₹{new_tax:,}
-            Health & Education Cess: ₹{new_cess:,}
-            **Total Tax: ₹{new_total:,}**
-            """)
-        
-        # Create comparison chart
-        comparison_data = {
-            'Regime': ['Old Regime', 'New Regime'],
-            'Tax Amount': [old_total, new_total]
-        }
-        fig = px.bar(comparison_data, x='Regime', y='Tax Amount',
-                    title='Tax Comparison',
-                    color='Regime',
-                    color_discrete_map={'Old Regime': '#ff9999', 'New Regime': '#99ff99'})
-        st.plotly_chart(fig)
-        
-        # Show savings
-        savings = abs(old_total - new_total)
-        better_regime = "New Regime" if new_total < old_total else "Old Regime"
-        st.markdown(f"### 💰 Potential Savings")
-        st.markdown(f"**{better_regime}** is better for you by **₹{savings:,}**")
+        🔸 Total Annual Tax: ₹{old_total:,}
+        🔸 Monthly Tax (TDS): ₹{old_total/12:,.2f}
+        """)
         
     with col2:
-        st.subheader("ℹ️ About Tax Regimes")
+        st.markdown("### New Tax Regime")
+        st.success(f"""
+        💰 Gross Annual Salary: ₹{salary:,}
         
-        # Tax regime explanations
-        with st.expander("Old Tax Regime"):
-            st.markdown("""
-            ### Old Tax Regime Features:
-            - Standard Deduction: ₹50,000
-            - Allows various deductions and exemptions
-            
-            #### Tax Slabs:
-            - 0 to 2.5L: No tax
-            - 2.5L to 5L: 5%
-            - 5L to 10L: 20%
-            - Above 10L: 30%
-            
-            #### Available Deductions:
-            - Section 80C (up to ₹1.5L)
-            - HRA
-            - Home Loan Interest
-            - NPS
-            - Medical Insurance
-            - And many more...
-            """)
-            
-        with st.expander("New Tax Regime"):
-            st.markdown("""
-            ### New Tax Regime Features:
-            - Standard Deduction: ₹75,000
-            - No additional deductions
-            - More tax slabs for gradual increase
-            
-            #### Tax Slabs:
-            - 0 to 4L: No tax
-            - 4L to 8L: 5%
-            - 8L to 12L: 10%
-            - 12L to 16L: 15%
-            - 16L to 20L: 20%
-            - 20L to 24L: 25%
-            - Above 24L: 30%
-            
-            #### Benefits:
-            - Simplified tax calculation
-            - Higher standard deduction
-            - More tax slabs for smoother progression
-            - Better for those with fewer investments
-            """)
-            
-        with st.expander("Which Regime is better "):
-            st.markdown("""
-      
-            
-            👉Old Regime is better if :
-            - You have significant investments
-            - You pay home loan EMI
-            - You can claim deductions > ₹8L
-            - You have multiple income sources
-            
-            👉New Regime is Better if:
-            - You prefer simplicity
-            - You don't have many investments
-            - Your salary is below ₹15L
-            - You're starting your career
-            
+        Deductions Breakdown:
+        - Standard Deduction: ₹75,000
+        - No other deductions available
         
-            """)
+        📊 Calculations:
+        - Total Deductions: ₹75,000
+        - Taxable Income: ₹{new_taxable:,}
+        - Base Tax: ₹{new_tax:,}
+        - Health & Education Cess (4%): ₹{new_cess:,}
+        
+        🔸 Total Annual Tax: ₹{new_total:,}
+        🔸 Monthly Tax (TDS): ₹{new_total/12:,.2f}
+        """)
+    
+    # Comparison Visualizations
+    st.markdown("### 📊 Tax Comparison Visualization")
+    
+    # Create comparison chart
+    fig = go.Figure(data=[
+        go.Bar(name='Annual Tax', 
+               x=['Old Regime', 'New Regime'],
+               y=[old_total, new_total],
+               text=[f'₹{old_total:,}', f'₹{new_total:,}'],
+               textposition='auto',
+               marker_color=['#FF9999', '#99FF99'])
+    ])
+    
+    fig.update_layout(
+        title='Tax Comparison Between Regimes',
+        yaxis_title='Tax Amount (₹)',
+        height=500
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # Show savings and recommendation
+    savings = abs(old_total - new_total)
+    better_regime = "New" if new_total < old_total else "Old"
+    
+    st.markdown("### 💡 Recommendation")
+    st.markdown(f"""
+    Based on your salary of ₹{salary:,}:
+    
+    - The **{better_regime} Tax Regime** would be more beneficial for you
+    - Potential annual savings: ₹{savings:,}
+    - Monthly savings: ₹{savings/12:,.2f}
+    
+    """)
+    
+    # Monthly TDS Breakdown
+    st.markdown("### 📅 Monthly TDS Breakdown")
+    col_tds1, col_tds2 = st.columns(2)
+    
+    with col_tds1:
+        st.markdown("#### Old Regime Monthly TDS")
+        old_monthly_df = create_monthly_breakdown(old_total)
+        st.dataframe(old_monthly_df.style.format({'TDS Amount': '₹{:,.2f}'}))
+        
+    with col_tds2:
+        st.markdown("#### New Regime Monthly TDS")
+        new_monthly_df = create_monthly_breakdown(new_total)
+        st.dataframe(new_monthly_df.style.format({'TDS Amount': '₹{:,.2f}'}))
 
 if __name__ == "__main__":
     main()
